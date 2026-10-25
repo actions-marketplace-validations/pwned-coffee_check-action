@@ -1,0 +1,45 @@
+name: pwned.coffee check
+description: Check a repository's lockfiles, Dockerfiles, .nvmrc and workflows against pwned.coffee's live security incidents, and fail when packages need fixing.
+author: pwned.coffee
+branding:
+  icon: coffee
+  color: blue
+inputs:
+  max-to-fix:
+    description: Fail when more than this many packages are affected ("to fix"). -1 never fails.
+    required: false
+    default: '0'
+  path:
+    description: The directory to check, relative to the workspace.
+    required: false
+    default: '.'
+  site:
+    description: The pwned.coffee instance to ask.
+    required: false
+    default: https://pwned.coffee
+outputs:
+  to-fix:
+    description: Packages with a live ticket saying they are affected.
+    value: ${{ steps.check.outputs.to-fix }}
+  upgrades:
+    description: Of those, how many have an upgrade that clears them.
+    value: ${{ steps.check.outputs.upgrades }}
+  no-fix:
+    description: Of those, how many have no fix yet.
+    value: ${{ steps.check.outputs.no-fix }}
+  to-check:
+    description: Packages a ticket names that need a human to check.
+    value: ${{ steps.check.outputs.to-check }}
+  report:
+    description: Path to the JSON report (the /api/check response).
+    value: ${{ steps.check.outputs.report }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/check.sh"'
+      env:
+        INPUT_MAX_TO_FIX: ${{ inputs.max-to-fix }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_SITE: ${{ inputs.site }}

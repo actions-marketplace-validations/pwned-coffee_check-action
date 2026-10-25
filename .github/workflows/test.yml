@@ -1,0 +1,43 @@
+name: test
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '17 7 * * 1'
+permissions:
+  contents: read
+jobs:
+  vulnerable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        uses: ./
+        with:
+          path: test/vulnerable
+          max-to-fix: '-1'
+      - name: It finds packages to fix
+        run: |
+          echo "to-fix=${{ steps.check.outputs.to-fix }}"
+          test "${{ steps.check.outputs.to-fix }}" -gt 0
+          jq -e '.counts.affected > 0' "${{ steps.check.outputs.report }}"
+  fails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        uses: ./
+        continue-on-error: true
+        with:
+          path: test/vulnerable
+      - name: It failed the step
+        run: test "${{ steps.check.outcome }}" = failure
+  clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        uses: ./
+        with:
+          path: test/clean
+      - run: test "${{ steps.check.outputs.to-fix }}" = 0
