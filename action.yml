@@ -9,6 +9,10 @@ inputs:
     description: Fail when more than this many packages are affected ("to fix"). -1 never fails.
     required: false
     default: '0'
+  fail-on-previously:
+    description: Also fail when a past ticket (no longer live) held an installed version. That is history, not a verdict, so it is off by default.
+    required: false
+    default: 'false'
   path:
     description: The directory to check, relative to the workspace.
     required: false
@@ -30,6 +34,9 @@ outputs:
   to-check:
     description: Packages a ticket names that need a human to check.
     value: ${{ steps.check.outputs.to-check }}
+  previously:
+    description: Packages only a past ticket held (history, not a verdict).
+    value: ${{ steps.check.outputs.previously }}
   report:
     description: Path to the JSON report (the /api/check response).
     value: ${{ steps.check.outputs.report }}
@@ -41,5 +48,6 @@ runs:
       run: '"$GITHUB_ACTION_PATH/check.sh"'
       env:
         INPUT_MAX_TO_FIX: ${{ inputs.max-to-fix }}
+        INPUT_FAIL_ON_PREVIOUSLY: ${{ inputs.fail-on-previously }}
         INPUT_PATH: ${{ inputs.path }}
         INPUT_SITE: ${{ inputs.site }}

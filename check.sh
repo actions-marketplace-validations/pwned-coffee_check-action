@@ -8,16 +8,19 @@ site="${INPUT_SITE:-https://pwned.coffee}"
 site="${site%/}"
 root="${INPUT_PATH:-.}"
 max="${INPUT_MAX_TO_FIX:-0}"
+fail_previously="${INPUT_FAIL_ON_PREVIOUSLY:-false}"
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 output="${GITHUB_OUTPUT:-/dev/null}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-# The files the checker reads, outside dependency and VCS folders; the server takes 40 files, 6 MB.
+# The files the checker reads (its READERS in src/repo.ts), outside dependency and VCS folders; the
+# server takes 40 files, 6 MB.
 (cd "$root" && find . \( -name node_modules -o -name .git -o -name vendor -o -name target -o -name .venv \) -prune -o -type f \( \
-  -name package-lock.json -o -name yarn.lock -o -name pnpm-lock.yaml -o -name 'requirements*.txt' -o -name poetry.lock \
-  -o -name uv.lock -o -name Pipfile.lock -o -name composer.lock -o -name go.sum -o -name go.mod -o -name Cargo.lock \
-  -o -name Gemfile.lock -o -name 'Dockerfile*' -o -name .nvmrc -o -name .node-version \
+  -name package-lock.json -o -name npm-shrinkwrap.json -o -name yarn.lock -o -name pnpm-lock.yaml -o -name pnpm-lock.yml \
+  -o -name 'requirements*.txt' -o -name poetry.lock -o -name uv.lock -o -name Pipfile.lock -o -name composer.lock \
+  -o -name go.sum -o -name go.mod -o -name Cargo.lock -o -name Gemfile.lock -o -name 'Dockerfile*' -o -name 'Containerfile*' \
+  -o -name '*.dockerfile' -o -name .nvmrc -o -name .node-version -o -name action.yml -o -name action.yaml \
   -o -path './.github/workflows/*.yml' -o -path './.github/workflows/*.yaml' \) -print) | sed 's|^\./||' | LC_ALL=C sort | head -n 40 > "$work/files"
 
 if [ ! -s "$work/files" ]; then
@@ -45,6 +48,7 @@ to_fix="$(jq '.counts.affected' "$report")"
 upgrades="$(jq '.counts.upgrades' "$report")"
 no_fix="$(jq '.counts.no_fix' "$report")"
 to_check="$(jq '.counts.check' "$report")"
+previous="$(jq '.counts.previously // 0' "$report")"
 kept="${RUNNER_TEMP:-$work}/pwned-coffee-report.json"
 [ "$kept" = "$report" ] || cp "$report" "$kept"
 {
@@ -52,6 +56,7 @@ kept="${RUNNER_TEMP:-$work}/pwned-coffee-report.json"
   echo "upgrades=$upgrades"
   echo "no-fix=$no_fix"
   echo "to-check=$to_check"
+  echo "previously=$previous"
   echo "report=$kept"
 } >> "$output"
 
@@ -83,6 +88,14 @@ headline="$(packages "$to_fix") to fix"
       | "| \(.package | md) | \(.version | md) | \(.file | md) | \((.note // .action) | md) | [\(.title | md)](\(.url)) |"' "$report"
     echo
   fi
+  if [ "$previous" != 0 ]; then
+    echo "### Previously on the board"
+    echo
+    echo "No longer live, so not a verdict: history for these versions."
+    echo
+    jq -r 'def md: tostring | gsub("\\|"; "\\|"); .previously[] | "- \(.package | md) \(.version | md): [\(.title | md)](\(.url))"' "$report"
+    echo
+  fi
   echo "Not security advice. Confirm against the vendor advisory on each ticket."
 } >> "$summary"
 
@@ -91,8 +104,12 @@ prefix=""
 [ "$root" = "." ] || prefix="${root%/}/"
 jq -r --arg p "$prefix" '.matches[] | select(.status == "affected") | "::warning file=\($p)\(.file),title=\(.package) \(.version)::\(.action) (\(.url))"' "$report"
 
-echo "pwned.coffee: $headline ($upgrades with an upgrade, $no_fix with no fix yet, $to_check to check)."
+echo "pwned.coffee: $headline ($upgrades with an upgrade, $no_fix with no fix yet, $to_check to check, $previous previously on the board)."
 if [ "$max" -ge 0 ] && [ "$to_fix" -gt "$max" ]; then
   echo "::error title=pwned.coffee::$(packages "$to_fix") to fix (allowed: $max)."
+  exit 1
+fi
+if [ "$fail_previously" = true ] && [ "$previous" != 0 ]; then
+  echo "::error title=pwned.coffee::$(packages "$previous") previously on the board (fail-on-previously)."
   exit 1
 fi
