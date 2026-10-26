@@ -1,8 +1,8 @@
 name: pwned.coffee check
-description: Check a repository's lockfiles, Dockerfiles, .nvmrc and workflows against pwned.coffee's live security incidents, and fail when packages need fixing.
+description: Fail CI when a package in your lockfiles, Dockerfiles or workflows has a live security incident on pwned.coffee.
 author: pwned.coffee
 branding:
-  icon: coffee
+  icon: shield
   color: blue
 inputs:
   max-to-fix:
